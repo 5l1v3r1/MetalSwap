@@ -70,7 +70,6 @@ async function main() {
   const token1 = new ethers.Contract(token1Address, ERC20.abi, signer);
   const name1 = await token1.name();
 
-  const deadline = Math.floor(Date.now() / 1000) + 60 * 10; // 10 mins
   const path = [
       token0Address, // give
       token1Address, // get
@@ -80,6 +79,8 @@ async function main() {
 
   while(1) {
     try {
+      const deadline = Math.floor(Date.now() / 1000) + 60 * 10; // 10 mins
+
       await router.callStatic.swapExactTokensForETHSupportingFeeOnTransferTokens(
         parsedAmount,
         quote[1],
