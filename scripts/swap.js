@@ -51,7 +51,6 @@ async function main() {
   const key = process.env.PRIVATE_KEY;
   const amount = parameters.amount;
   const delay = parameters.delay;
-  console.log(delay)
   const token0Address = parameters.sell;
   const token1Address = parameters.get;
   const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
