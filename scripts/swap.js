@@ -3,18 +3,19 @@ const { ethers } = require("ethers");
 const parseArgs = require("minimist");
 const { confirm } = require("./common/confirm");
 const { txhandler } = require("./common/txhandler");
-const UNISWAP = require("@uniswap/v2-periphery/build/UniswapV2Router01.json");
+const PANCAKE = require("../abi/IPancakeRouter01.json");
 const ERC20 = require("@openzeppelin/contracts/build/contracts/ERC20.json");
 
 const PARAMETERS = Object.freeze([
   ["amount", ["amount", "a"]],
   ["sell", ["sell", "s"]],
   ["get", ["get", "g"]],
+  ["delay", ["delay", "d"]],
 ]);
 
 async function main() {
   const argv = parseArgs(process.argv.slice(2), {
-    string: ["amount", "a", "sell", "s", "get", "g"],
+    string: ["amount", "a", "sell", "s", "get", "g", "delay", "d"],
   });
 
   const paramsCheck = PARAMETERS.every(parameterTuple => {
@@ -33,6 +34,8 @@ async function main() {
         --sell              -s : Token to sell\n
     
         --get               -g : Token to get\n
+
+        --delay             -d : Time delay in seconds between calls\n
     `);
 
     return;
@@ -47,6 +50,8 @@ async function main() {
 
   const key = process.env.PRIVATE_KEY;
   const amount = parameters.amount;
+  const delay = parameters.delay;
+  console.log(delay)
   const token0Address = parameters.sell;
   const token1Address = parameters.get;
   const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
@@ -56,7 +61,7 @@ async function main() {
   const signer = new ethers.Wallet(key, provider);
   const address = await signer.getAddress();
 
-  const router = new ethers.Contract(routerAddress, UNISWAP.abi, signer);
+  const router = new ethers.Contract(routerAddress, PANCAKE, signer);
 
   const token0 = new ethers.Contract(token0Address, ERC20.abi, signer);
   const name0 = await token0.name();
@@ -74,22 +79,32 @@ async function main() {
 
   const quote = await router.getAmountsOut(parsedAmount, path);
 
-  if (await confirm(`Are you sure you want to sell ${parsedAmount} ${name0} for ${quote[1]} ${name1}? (y/n)`)) {
-    console.log(quote)
+  while(1) {
+    try {
+      await router.callStatic.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        parsedAmount,
+        quote[1],
+        path,
+        address,
+        deadline,
+        { gasLimit: 5000000 }
+      );
 
-    await txhandler(
-      router.swapExactTokensForETHSupportingFeeOnTransferTokens,
-      parsedAmount,
-      quote[1],
-      path,
-      address,
-      deadline,
-      { gasLimit: 30000000 }
-    );
+      await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        parsedAmount,
+        quote[1],
+        path,
+        address,
+        deadline,
+        { gasLimit: 5000000 }
+      );
 
-    console.log("Done");
-  } else {
-    console.log("Aborted");
+      console.log("Done");
+      return;
+    } catch (e) {
+      console.log("Blocked");
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
 }
 
