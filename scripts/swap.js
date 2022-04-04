@@ -86,7 +86,7 @@ async function main() {
         path,
         address,
         deadline,
-        { gasLimit: 5000000 }
+        { gasLimit: 10000000 }
       );
 
       await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
@@ -95,13 +95,13 @@ async function main() {
         path,
         address,
         deadline,
-        { gasLimit: 5000000 }
+        { gasLimit: 10000000 }
       );
 
       console.log("Done");
       return;
     } catch (e) {
-      console.log("Blocked");
+      console.log(e.reason);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
