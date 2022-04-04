@@ -7,7 +7,7 @@
   },
   "keywords": [
     "tokens",
-    "ethereum",
+    "ethereum"
   ],
   "engines": {
     "node": ">=14"
