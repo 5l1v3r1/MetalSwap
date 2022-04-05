@@ -59,6 +59,7 @@ async function main() {
   const provider = new ethers.providers.JsonRpcProvider(url);
   const signer = new ethers.Wallet(key, provider);
   const address = await signer.getAddress();
+  console.log("Address:", address);
 
   const router = new ethers.Contract(routerAddress, PANCAKE, signer);
 
@@ -71,28 +72,35 @@ async function main() {
   const name1 = await token1.name();
 
   const path = [
-      token0Address, // give
-      token1Address, // get
+    token0Address, // give
+    token1Address, // get
   ];
 
-  const quote = await router.getAmountsOut(parsedAmount, path);
+  console.log(`Trying to swap ${name0} for ${name1} with a delay of ${delay/1000} seconds between retries`);
+
+  let quote;
+  let deadline;
+  let slippage;
 
   while(1) {
     try {
-      const deadline = Math.floor(Date.now() / 1000) + 60 * 10; // 10 mins
+      quote = await router.getAmountsOut(parsedAmount, path);
+      
+      deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 mins
+      slippage = (quote[1].sub(quote[1].mul(10).div(100))); // 10% slippage
 
-      await router.callStatic.swapExactTokensForETHSupportingFeeOnTransferTokens(
+      await router.callStatic.swapExactTokensForETH(
         parsedAmount,
-        quote[1],
+        slippage,
         path,
         address,
         deadline,
         { gasLimit: 10000000 }
       );
 
-      await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+      await router.swapExactTokensForETH(
         parsedAmount,
-        quote[1],
+        slippage,
         path,
         address,
         deadline,
@@ -102,7 +110,13 @@ async function main() {
       console.log("Done");
       return;
     } catch (e) {
-      console.log(e.reason);
+      if(e.reason != "TransferHelper: TRANSFER_FROM_FAILED") {
+        console.log("Weird")
+        console.log(e)
+      } else {
+        console.log(new Date().toLocaleString() + " " + e.reason);
+      }
+      
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
