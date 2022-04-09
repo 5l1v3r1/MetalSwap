@@ -67,13 +67,17 @@ async function main() {
   const name0 = await token0.name();
   const decimals = await token0.decimals();
   const parsedAmount = ethers.utils.parseUnits(amount, decimals);
+  console.log("parsedAmount", parsedAmount.toString());
 
   const token1 = new ethers.Contract(token1Address, ERC20.abi, signer);
   const name1 = await token1.name();
 
   const path = [
-    token0Address, // give
-    token1Address, // get
+    "0x8995f63d98aADDaC79afC92025431b0f50633DDA",
+    "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+    "0x55d398326f99059fF775485246999027B3197955"
+    //token0Address, // give
+    //token1Address, // get
   ];
 
   console.log(`Trying to swap ${name0} for ${name1} with a delay of ${delay/1000} seconds between retries`);
@@ -81,15 +85,13 @@ async function main() {
   let quote;
   let deadline;
   let slippage;
-
   while(1) {
     try {
       quote = await router.getAmountsOut(parsedAmount, path);
-      
       deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 mins
       slippage = (quote[1].sub(quote[1].mul(10).div(100))); // 10% slippage
 
-      await router.callStatic.swapExactTokensForETH(
+      await router.callStatic.swapExactTokensForTokens(
         parsedAmount,
         slippage,
         path,
@@ -98,7 +100,7 @@ async function main() {
         { gasLimit: 10000000 }
       );
 
-      await router.swapExactTokensForETH(
+      await router.swapExactTokensForTokens(
         parsedAmount,
         slippage,
         path,
