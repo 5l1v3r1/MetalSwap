@@ -1,126 +1,110 @@
 require("dotenv/config");
 const { ethers } = require("ethers");
-const parseArgs = require("minimist");
-const { confirm } = require("./common/confirm");
-const { txhandler } = require("./common/txhandler");
 const PANCAKE = require("../abi/IPancakeRouter01.json");
 const ERC20 = require("@openzeppelin/contracts/build/contracts/ERC20.json");
 
-const PARAMETERS = Object.freeze([
-  ["amount", ["amount", "a"]],
-  ["sell", ["sell", "s"]],
-  ["get", ["get", "g"]],
-  ["delay", ["delay", "d"]],
-]);
-
 async function main() {
-  const argv = parseArgs(process.argv.slice(2), {
-    string: ["amount", "a", "sell", "s", "get", "g", "delay", "d"],
-  });
 
-  const paramsCheck = PARAMETERS.every(parameterTuple => {
-    const [_name, [long, short]] = parameterTuple;
-    return long in argv || short in argv;
-  });
-
-  if (!paramsCheck) {
-    console.log(`
-      Missing mandatory parameters!\n
-
-      Help:\n
-
-        --amount            -n : Amount to sell\n
-
-        --sell              -s : Token to sell\n
-    
-        --get               -g : Token to get\n
-
-        --delay             -d : Time delay in seconds between calls\n
-    `);
-
-    return;
-  }
-
-  const parameters = {};
-
-  PARAMETERS.forEach(param => {
-    const [name, [long, short]] = param;
-    parameters[name] = argv[long] || argv[short];
-  });
 
   const key = process.env.PRIVATE_KEY;
-  const amount = parameters.amount;
-  const delay = parameters.delay;
-  const token0Address = parameters.sell;
-  const token1Address = parameters.get;
-  const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-
   const url = 'https://bsc-dataseed.binance.org/';
   const provider = new ethers.providers.JsonRpcProvider(url);
   const signer = new ethers.Wallet(key, provider);
   const address = await signer.getAddress();
   console.log("Address:", address);
 
+  const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  const metalAddress = "0x8995f63d98aADDaC79afC92025431b0f50633DDA";
+  const bnbAddress = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+
   const router = new ethers.Contract(routerAddress, PANCAKE, signer);
+  const metal = new ethers.Contract(metalAddress, ERC20.abi, signer);
+  const decimals = await metal.decimals();
 
-  const token0 = new ethers.Contract(token0Address, ERC20.abi, signer);
-  const name0 = await token0.name();
-  const decimals = await token0.decimals();
-  const parsedAmount = ethers.utils.parseUnits(amount, decimals);
-  console.log("parsedAmount", parsedAmount.toString());
+  const amountToBuy = ethers.utils.parseUnits("200.0", decimals);
+  const amountToSell = ethers.utils.parseUnits("250.0", decimals);
 
-  const token1 = new ethers.Contract(token1Address, ERC20.abi, signer);
-  const name1 = await token1.name();
+  console.log("amountToBuy", amountToBuy.toString());
+  console.log("amountToSell", amountToSell.toString());
 
-  const path = [
-    "0x8995f63d98aADDaC79afC92025431b0f50633DDA",
-    "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
-    "0x55d398326f99059fF775485246999027B3197955"
-    //token0Address, // give
-    //token1Address, // get
+  const buyPath = [
+    bnbAddress,
+    metalAddress,
+
   ];
-
-  console.log(`Trying to swap ${name0} for ${name1} with a delay of ${delay/1000} seconds between retries`);
+  const sellPath = [
+    metalAddress,
+    bnbAddress,
+  ];
 
   let quote;
   let deadline;
   let slippage;
-  while(1) {
-    try {
-      quote = await router.getAmountsOut(parsedAmount, path);
-      deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 mins
-      slippage = (quote[1].sub(quote[1].mul(10).div(100))); // 10% slippage
 
-      await router.callStatic.swapExactTokensForTokens(
-        parsedAmount,
-        slippage,
-        path,
-        address,
-        deadline,
-        { gasLimit: 10000000 }
-      );
+  // buy 200
+  deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 mins
+  quote = await router.getAmountsIn(amountToBuy, buyPath);
+  slippage = (quote[1].sub(quote[1].mul(1).div(100))); // 1% slippage
 
-      await router.swapExactTokensForTokens(
-        parsedAmount,
-        slippage,
-        path,
-        address,
-        deadline,
-        { gasLimit: 10000000 }
-      );
-
-      console.log("Done");
-      return;
-    } catch (e) {
-      if(e.reason != "TransferHelper: TRANSFER_FROM_FAILED") {
-        console.log("Weird")
-        console.log(e)
-      } else {
-        console.log(new Date().toLocaleString() + " " + e.reason);
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
+  const buyTx = await router.swapETHForExactTokens(
+    slippage,
+    buyPath,
+    address,
+    deadline,
+    {
+      gasLimit: 1000000,
+      value: quote[0]
     }
+  );
+
+  await buyTx.wait();
+
+  console.log("Buy OK");
+
+  await new Promise(resolve => setTimeout(resolve, 10000));
+
+  try {
+    // sell 250
+    deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 mins
+    quote = await router.getAmountsOut(amountToSell, sellPath);
+    slippage = (quote[1].sub(quote[1].mul(1).div(100))); // 1% slippage
+
+    let sellTx = await router.swapExactTokensForETH(
+      amountToSell,
+      slippage,
+      sellPath,
+      address,
+      deadline,
+      {
+        gasLimit: 1000000,
+      }
+    );
+
+    await sellTx.wait();
+
+    console.log("Sell OK");
+  } catch(e) {
+    console.log("Sell NOT OK");
+
+    const newAmountToSell = ethers.utils.parseUnits("200.0", decimals);
+
+    deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 mins
+    quote = await router.getAmountsOut(newAmountToSell, sellPath);
+    slippage = (quote[1].sub(quote[1].mul(1).div(100))); // 1% slippage
+
+    let sellTx = await router.swapExactTokensForETH(
+      newAmountToSell,
+      slippage,
+      sellPath,
+      address,
+      deadline,
+      {
+        gasLimit: 1000000,
+      }
+    );
+
+    await sellTx.wait();
+    console.log("Sell MAYBE OK");
   }
 }
 
